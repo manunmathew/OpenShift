@@ -39,18 +39,19 @@
 			}
 		}
 	},
-	"variables": {
-	},
+	"variables": {},
 	"resources": [
 		{
 			"apiVersion": "[parameters('apiVersionNetwork')]",
 			"type": "Microsoft.Network/virtualNetworks/subnets",
 			"name": "[concat(parameters('existingVnetName'), '/', parameters('subnetName'))]",
 			"location": "[parameters('location')]",
-			"dependsOn": [
-			],
+			"dependsOn": [],
 			"properties": {
 				"addressPrefix": "[parameters('subnetPrefix')]",
+				"routeTable": {
+					"id": "[resourceId('Microsoft.Network/routeTables', (parameters('existingVnetName'))]"
+				},
 				"networkSecurityGroup": {
 					"id": "[parameters('networkSecurityGroup')]"
 				}
