@@ -1,5 +1,5 @@
 #!/bin/bash
-echo $(date) " - Starting Node Prep Script"
+echo $(date) " - Starting CNS Prep Script"
 
 export USERNAME_ORG=$1
 export PASSWORD_ACT_KEY="$2"
@@ -38,35 +38,6 @@ else
 		subscription-manager unregister
 		exit 3
 	fi
-fi
-
-# Attach node to first pool ID.  If sucessful, then all good.
-subscription-manager attach --pool=$POOL_ID1 > attach1.log
-if [ $? -eq 0 ]
-then
-    echo "Pool $POOL_ID1 attached successfully"
-else
-    grep attached attach1.log
-    if [ $? -eq 0 ]
-    then
-        echo "Pool $POOL_ID1 was already attached and was not attached again."
-    else
-		# If first pool ID is full, then attach to second pool ID.
-        subscription-manager attach --pool=$POOL_ID2 > attach2.log
-		if [ $? -eq 0 ]
-		then
-			echo "Pool POOL_ID2 attached successfully"
-		else
-			grep attached attach2.log
-			if [ $? -eq 0 ]
-			then
-				echo "Pool $POOL_ID2 was already attached and was not attached again."
-			else
-				echo "Incorrect Pool ID or no entitlements available"
-				exit 4
-			fi
-		fi
-    fi
 fi
 
 # Disable all repositories and enable only the required ones

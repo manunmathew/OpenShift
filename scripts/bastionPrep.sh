@@ -15,6 +15,7 @@ export CUSTOMMASTERCAFILE="${11}"
 export CUSTOMMASTERCERTFILE="${12}"
 export CUSTOMMASTERKEYFILE="${13}"
 export DOMAIN="${14}"
+export MINORVERSION=${15}
 
 # Generate private keys for use by Ansible
 echo $(date) " - Generating Private keys for use by Ansible for OpenShift Installation"
@@ -56,20 +57,20 @@ else
 	fi
 fi
 
-subscription-manager attach --pool=$POOL_ID > attach.log
-if [ $? -eq 0 ]
-then
-    echo "Pool attached successfully"
-else
-    grep attached attach.log
-    if [ $? -eq 0 ]
-    then
-        echo "Pool $POOL_ID was already attached and was not attached again."
-    else
-        echo "Incorrect Pool ID or no entitlements available"
-        exit 4
-    fi
-fi
+# subscription-manager attach --pool=$POOL_ID > attach.log
+# if [ $? -eq 0 ]
+# then
+    # echo "Pool attached successfully"
+# else
+    # grep attached attach.log
+    # if [ $? -eq 0 ]
+    # then
+        # echo "Pool $POOL_ID was already attached and was not attached again."
+    # else
+        # echo "Incorrect Pool ID or no entitlements available"
+        # exit 4
+    # fi
+# fi
 
 # Disable all repositories and enable only the required ones
 echo $(date) " - Disabling all repositories and enabling only the required repos"
@@ -82,11 +83,13 @@ subscription-manager repos \
     --enable="rhel-7-server-ose-3.11-rpms" \
     --enable="rhel-7-server-ansible-2.6-rpms" \
     --enable="rhel-7-fast-datapath-rpms" \
-    --enable="rh-gluster-3-client-for-rhel-7-server-rpms"
+    --enable="rh-gluster-3-client-for-rhel-7-server-rpms" \
+    --enable="rhel-7-server-optional-rpms"
 
 # Update system to latest packages
 echo $(date) " - Update system to latest packages"
-yum -y update --releasever=7.5 --exclude=WALinuxAgent
+# yum -y update --releasever=7.5 --exclude=WALinuxAgent
+yum -y update --exclude=WALinuxAgent
 echo $(date) " - System update complete"
 
 # Install base packages and update system to latest packages
@@ -94,12 +97,13 @@ echo $(date) " - Install base packages"
 yum -y install wget git net-tools bind-utils iptables-services bridge-utils bash-completion httpd-tools kexec-tools sos psacct
 yum -y install ansible
 yum -y update glusterfs-fuse
+yum -y install pcsc-lite-devel
 echo $(date) " - Base package installation complete"
 
 # Install OpenShift utilities
 echo $(date) " - Installing OpenShift utilities"
 
-yum -y install openshift-ansible
+yum -y install openshift-ansible-${MINORVERSION}
 echo $(date) " - OpenShift utilities installation complete"
 
 # Installing Azure CLI

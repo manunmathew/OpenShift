@@ -14,49 +14,42 @@
 				"description": "API version for compute resources"
 			}
 		},
-		"nodePrepScriptUrl": {
+		"openshiftScaleUpScriptUrl": {
 			"type": "string",
 			"metadata": {
-				"description": "Compute node prep script Url"
+				"description": "Cluster scale up script Url"
 			}
 		},
-		"nodePrepScriptFileName": {
+		"openshiftScaleUpScriptFileName": {
 			"type": "string",
 			"metadata": {
-				"description": "Compute node prep script file name"
+				"description": "Cluster scale up script file name"
+			}
+		},
+		"openshiftBastionHostname": {
+			"type": "string",
+			"metadata": {
+				"description": "OpenShift Bastion hostname"
 			}
 		},
 		"openshiftNodeHostname": {
 			"type": "string",
 			"metadata": {
-				"description": "OpenShift Node hostname"
+				"description": "OpenShift node hostname"
 			}
 		},
-		"rhsmUsernameOrOrgId": {
+		"adminUsername": {
 			"type": "string",
 			"metadata": {
-				"description": "Red Hat Subscription Manager username or Organization Id"
+				"description": "Administrator username on all VMs"
 			}
-		},
-		"rhsmPasswordOrActivationKey": {
-			"type": "securestring",
-			"metadata": {
-				"description": "Red Hat Subscription Manager password or activation key"
-			}
-		},
-		"rhsmPoolId1": {
+		"nodeType": {
 			"type": "string",
 			"metadata": {
-				"description": "Pool Id #1 with OpenShift entitlements"
+				"description": "Node type"
 			}
 		},
-		"rhsmPoolId2": {
-			"type": "string",
-			"metadata": {
-				"description": "Pool Id #2 with OpenShift entitlements"
-			}
-		},
-		"customTags": {
+		"nodeCustomTags": {
 			"type": "object",
 			"metadata": {
 				"description": "Custom Tags"
@@ -68,7 +61,7 @@
 	},
 	"resources": [{
 		"type": "Microsoft.Compute/virtualMachines/extensions",
-		"name": "[concat(parameters('openshiftNodeHostname'), '/prepNodes')]",
+		"name": "[concat(parameters('openshiftBastionHostname'), '/deployOpenShift')]",
 		"location": "[parameters('location')]",
 		"apiVersion": "[parameters('apiVersionCompute')]",
 		"tags": "[parameters('customTags')]",
@@ -79,11 +72,11 @@
 			"autoUpgradeMinorVersion": true,
 			"settings": {
 				"fileUris": [
-					"[parameters('nodePrepScriptUrl')]"
+					"[parameters('openshiftScaleUpScriptUrl')]"
 				]
 			},
 			"protectedSettings": {
-				"commandToExecute": "[concat('bash ', parameters('nodePrepScriptFileName'), ' ', variables('singlequote'), parameters('rhsmUsernameOrOrgId'), variables('singlequote'), ' ',variables('singlequote'), parameters('rhsmPasswordOrActivationKey'), variables('singlequote'), ' ', variables('singlequote'), parameters('rhsmPoolId1'), variables('singlequote'), ' ', variables('singlequote'), parameters('rhsmPoolId2'), variables('singlequote'))]"
+				"commandToExecute": "[concat('bash ', parameters('openshiftScaleUpScriptFileName'), ' ', variables('singlequote'), parameters('adminUsername'), variables('singlequote'), ' ', variables('singlequote'), parameters('openshiftNodeHostname'), variables('singlequote'), ' ', variables('singlequote'), parameters('nodeType'), variables('singlequote'))]"
 			}
 		}
 	}],

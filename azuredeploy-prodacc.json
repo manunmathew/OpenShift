@@ -115,6 +115,30 @@
 				"description": "Enter the appropriate publisher, offer, sku and version values for the appropriate marketplace image you want to use."
 			}
 		},
+		"coreInfraCustomTags": {
+			"type": "object",
+			"defaultValue": {
+				"applicationId": "Application ID",
+				"applicationName": "OpenShift Container Platform cluster",
+				"businessUnitName": "Business Unit",
+				"environment": "Environment"
+			},
+			"metadata": {
+				"description": "Custom tags to apply to resources"
+			}
+		},
+		"toolsCustomTags": {
+			"type": "object",
+			"defaultValue": {
+				"applicationId": "Application ID",
+				"applicationName": "OpenShift Container Platform cluster",
+				"businessUnitName": "Business Unit",
+				"environment": "Environment"
+			},
+			"metadata": {
+				"description": "Custom tags to apply to resources"
+			}
+		},
 		"productionCustomTags": {
 			"type": "object",
 			"defaultValue": {
@@ -163,6 +187,13 @@
 			"maxLength": 20,
 			"metadata": {
 				"description": "OpenShift cluster prefix for compute nodes. Used to generate compute node hostnames. Maximum of 20 characters."
+			}
+		},
+		"minorVersion": {
+			"type": "string",
+			"defaultValue": "69",
+			"metadata": {
+				"description": "Minor version of OpenShift 3.11 to deploy"
 			}
 		},
 		"masterInstanceCount": {
@@ -267,18 +298,39 @@
 				"description": "Enable Container Native Storage: true or false"
 			}
 		},
-		"rhsmUsernameOrOrgId": {
+		"rhsmUsernameOrOrgIdBroker": {
 			"type": "string",
 			"minLength": 1,
 			"metadata": {
 				"description": "Red Hat Subscription Manager Username or Organization ID. To find your Organization ID, run on registered server: subscription-manager identity"
 			}
 		},
-		"rhsmPoolId": {
+		"rhsmUsernameOrOrgIdCns": {
 			"type": "string",
 			"minLength": 1,
 			"metadata": {
-				"description": "Red Hat Subscription Manager Pool ID with OpenShift entitlements for Application Nodes. To find it, run on registered server: subscription-manager list"
+				"description": "Red Hat Subscription Manager Username or Organization ID. To find your Organization ID, run on registered server: subscription-manager identity"
+			}
+		},
+		"rhsmUsernameOrOrgIdCompute": {
+			"type": "string",
+			"minLength": 1,
+			"metadata": {
+				"description": "Red Hat Subscription Manager Username or Organization ID. To find your Organization ID, run on registered server: subscription-manager identity"
+			}
+		},
+		"rhsmPoolId1": {
+			"type": "string",
+			"minLength": 1,
+			"metadata": {
+				"description": "Red Hat Subscription Manager Pool ID #1 with OpenShift entitlements for Application Nodes. To find it, run on registered server: subscription-manager list"
+			}
+		},
+		"rhsmPoolId2": {
+			"type": "string",
+			"minLength": 1,
+			"metadata": {
+				"description": "Red Hat Subscription Manager Pool ID #2 with OpenShift entitlements for Application Nodes. To find it, run on registered server: subscription-manager list"
 			}
 		},
 		"rhsmBrokerPoolId": {
@@ -453,6 +505,20 @@
 			"defaultValue": "10.3.0.0/16",
 			"metadata": {
 				"description": "CIDR used for the cns subnet - needs to be a subset of the addressPrefix - default is 10.3.0.0/16"
+			}
+		},
+		"toolsVirtualNetworkName": {
+			"type": "string",
+			"defaultValue": "testvnet",
+			"metadata": {
+			"description": "Name of the vNet for tools nodes"
+			}
+		},
+		"toolsVirtualNetworkResourceGroup": {
+			"type": "string",
+			"defaultValue": "testvnetrg",
+			"metadata": {
+			"description": "Name of the tools vNet resource group"
 			}
 		},
 		"toolsSubnetName": {
@@ -634,6 +700,13 @@
 			"metadata": {
 				"description": "Subscription ID for tools node group components"
 			}
+		},
+		"projectRequestMessage": {
+			"type": "string",
+			"defaultValue": "none",
+			"metadata": {
+				"description": "Custom project request message to be inserted into master-config.yaml on all masters"
+			}
 		}
 	},
 	"variables": {
@@ -659,10 +732,10 @@
 		"diagStorageAccountM": "[concat(variables('simplifiedClusterPrefix'), 'prdsaoscm01')]",
 		"diagStorageAccountI": "[concat(variables('simplifiedClusterPrefix'), 'prdsaosci01')]",
 		"diagStorageAccountC": "[concat(variables('simplifiedClusterPrefix'), 'prdsaoscc01')]",
-		"diagStorageAccountT": "[concat(variables('simplifiedClusterPrefix'), 'prdsaoscp01')]",
+		"diagStorageAccountT": "[concat(variables('simplifiedClusterPrefix'), 'prdsaosca01')]",
 		"diagStorageAccountP": "[concat(variables('simplifiedClusterPrefix2'), 'prdsaosca01')]",
 		"diagStorageAccountA": "[concat(variables('simplifiedClusterPrefix2'), 'accsaosca01')]",
-		"newStorageAccountRegistry": "[concat(variables('simplifiedClusterPrefix'), 'prdsaosccr01')]",
+		"newStorageAccountRegistry": "[concat(variables('simplifiedClusterPrefix'), 'prdsaoscr01')]",
 		"coreInfraDiagStorageAccountArray": [
 			{ "name": "[variables('diagStorageAccountM')]"},
 			{ "name": "[variables('diagStorageAccountI')]"},
@@ -707,7 +780,6 @@
 		"bastionPublicIpDnsLabel": "[concat('bastiondns', uniqueString(resourceGroup().id))]",
 		"infraLbPublicIpDnsLabel": "[concat('infradns', uniqueString(concat(resourceGroup().id, 'infra')))]",
 		"openshiftMasterPublicIpDnsLabel": "[concat('masterdns', uniqueString(concat(resourceGroup().id, 'master')))]",
-		"persistentVolume1Type": "Standard_LRS",
 
 		"masterLoadBalancerName": "[concat(parameters('openshiftClusterPrefix'), '-Prd-Lb-Oscm-01')]",
 		"masterPublicIpAddressId": "[resourceId('Microsoft.Network/publicIPAddresses', variables('openshiftMasterPublicIpDnsLabel'))]",
@@ -768,10 +840,14 @@
 		"bastionPrepScriptUrl": "[concat(parameters('_artifactsLocation'), '/scripts/bastionPrep.sh')]",
 		"nodePrepScriptUrl": "[concat(parameters('_artifactsLocation'), '/scripts/nodePrep.sh')]",
 		"masterPrepScriptUrl": "[concat(parameters('_artifactsLocation'), '/scripts/masterPrep.sh')]",
+		"infraPrepScriptUrl": "[concat(parameters('_artifactsLocation'), '/scripts/infraPrep.sh')]",
+		"cnsPrepScriptUrl": "[concat(parameters('_artifactsLocation'), '/scripts/cnsPrep.sh')]",
 		"openshiftDeploymentScriptUrl": "[concat(parameters('_artifactsLocation'), '/scripts/deployOpenShift.sh')]",
 		"bastionPrepScriptFileName": "bastionPrep.sh",
 		"nodePrepScriptFileName": "nodePrep.sh",
 		"masterPrepScriptFileName": "masterPrep.sh",
+		"infraPrepScriptFileName": "infraPrep.sh",
+		"cnsPrepScriptFileName": "infraPrep.sh",
 		"openshiftDeploymentScriptFileName": "deployOpenShift.sh",
 		"clusterNodeDeploymentTemplateUrl": "[concat(parameters('_artifactsLocation'), '/nested/clusternode.json')]",
 		"clusterCnsNodeDeploymentTemplateUrl": "[concat(parameters('_artifactsLocation'), '/nested/clustercnsnode.json')]",
@@ -782,6 +858,7 @@
 		"subnetCreateTemplateUrl": "[concat(parameters('_artifactsLocation'), '/nested/subnetcreate.json')]",
 		"bastionPrepTemplateUrl": "[concat(parameters('_artifactsLocation'), '/nested/bastionprep.json')]",
 		"masterPrepTemplateUrl": "[concat(parameters('_artifactsLocation'), '/nested/masterprep.json')]",
+		"infraPrepTemplateUrl": "[concat(parameters('_artifactsLocation'), '/nested/infraprep.json')]",
 		"nodePrepTemplateUrl": "[concat(parameters('_artifactsLocation'), '/nested/nodeprep.json')]",
 		"deployOpenShift": true,
 		"vmSizesMap": {
@@ -1341,6 +1418,15 @@
 					"cnsSubnetPrefix": {
 						"value": "[parameters('cnsSubnetPrefix')]"
 					},
+					"toolsSubnetPrefix": {
+						"value": "[parameters('toolsSubnetPrefix')]"
+					},
+					"prodtestSubnetPrefix": {
+						"value": "[parameters('prodSubnetPrefix')]"
+					},
+					"accdevSubnetPrefix": {
+						"value": "[parameters('accSubnetPrefix')]"
+					},
 					"masterInstanceCount": {
 						"value": "[parameters('masterInstanceCount')]"
 					},
@@ -1350,8 +1436,14 @@
 					"cnsInstanceCount": {
 						"value": "[parameters('cnsInstanceCount')]"
 					},
+					"nameSuffix": {
+						"value": "01"
+					},
+					"hostSuffix": {
+						"value": "0"
+					},
 					"customTags": {
-						"value": "[parameters('productionCustomTags')]"
+						"value": "[parameters('coreInfraCustomTags')]"
 					}
 				}
 			}
@@ -1405,16 +1497,25 @@
 						"value": "[variables('nodeGroupAvailabilitySetArray')[0].name]"
 					},
 					"virtualNetworkResourceGroupName": {
-						"value": "[parameters('coreInfraVirtualNetworkResourceGroup')]"
+						"value": "[parameters('toolsVirtualNetworkResourceGroup')]"
 					},
 					"existingVnetName": {
-						"value": "[parameters('coreInfraVirtualNetworkName')]"
+						"value": "[parameters('toolsVirtualNetworkName')]"
 					},
 					"subnetName": {
 						"value": "[parameters('toolsSubnetName')]"
 					},
 					"subnetPrefix": {
 						"value": "[parameters('toolsSubnetPrefix')]"
+					},
+					"masterSubnetPrefix": {
+						"value": "[parameters('masterSubnetPrefix')]"
+					},
+					"infraSubnetPrefix": {
+						"value": "[parameters('infraSubnetPrefix')]"
+					},
+					"cnsSubnetPrefix": {
+						"value": "[parameters('cnsSubnetPrefix')]"
 					},
 					"nodeFirstAddrOctet4": {
 						"value": "[variables('toolsFirstAddrOctet4')]"
@@ -1428,8 +1529,14 @@
 					"nodeInstanceCount": {
 						"value": "[parameters('toolsNodeInstanceCount')]"
 					},
+					"nameSuffix": {
+						"value": "01"
+					},
+					"hostSuffix": {
+						"value": "0"
+					},
 					"customTags": {
-						"value": "[parameters('productionCustomTags')]"
+						"value": "[parameters('toolsCustomTags')]"
 					}
 				}
 			}
@@ -1493,6 +1600,15 @@
 					"subnetPrefix": {
 						"value": "[parameters('prodSubnetPrefix')]"
 					},
+					"masterSubnetPrefix": {
+						"value": "[parameters('masterSubnetPrefix')]"
+					},
+					"infraSubnetPrefix": {
+						"value": "[parameters('infraSubnetPrefix')]"
+					},
+					"cnsSubnetPrefix": {
+						"value": "[parameters('cnsSubnetPrefix')]"
+					},
 					"nodeFirstAddrOctet4": {
 						"value": "[variables('prodFirstAddrOctet4')]"
 					},
@@ -1504,6 +1620,12 @@
 					},
 					"nodeInstanceCount": {
 						"value": "[parameters('productionNodeInstanceCount')]"
+					},
+					"nameSuffix": {
+						"value": "01"
+					},
+					"hostSuffix": {
+						"value": "0"
 					},
 					"customTags": {
 						"value": "[parameters('productionCustomTags')]"
@@ -1570,6 +1692,15 @@
 					"subnetPrefix": {
 						"value": "[parameters('accSubnetPrefix')]"
 					},
+					"masterSubnetPrefix": {
+						"value": "[parameters('masterSubnetPrefix')]"
+					},
+					"infraSubnetPrefix": {
+						"value": "[parameters('infraSubnetPrefix')]"
+					},
+					"cnsSubnetPrefix": {
+						"value": "[parameters('cnsSubnetPrefix')]"
+					},
 					"nodeFirstAddrOctet4": {
 						"value": "[variables('accFirstAddrOctet4')]"
 					},
@@ -1581,6 +1712,12 @@
 					},
 					"nodeInstanceCount": {
 						"value": "[parameters('acceptanceNodeInstanceCount')]"
+					},
+					"nameSuffix": {
+						"value": "01"
+					},
+					"hostSuffix": {
+						"value": "0"
 					},
 					"customTags": {
 						"value": "[parameters('acceptanceCustomTags')]"
@@ -1652,7 +1789,7 @@
 						"value": "[variables('imageReference')]"
 					},
 					"customTags": {
-						"value": "[parameters('productionCustomTags')]"
+						"value": "[parameters('coreInfraCustomTags')]"
 					}
 				}
 			}
@@ -1731,7 +1868,7 @@
 						"value": "[variables('imageReference')]"
 					},
 					"customTags": {
-						"value": "[parameters('productionCustomTags')]"
+						"value": "[parameters('coreInfraCustomTags')]"
 					}
 				}
 			}
@@ -1810,7 +1947,7 @@
 						"value": "[variables('imageReference')]"
 					},
 					"customTags": {
-						"value": "[parameters('productionCustomTags')]"
+						"value": "[parameters('coreInfraCustomTags')]"
 					}
 				}
 			}
@@ -1892,7 +2029,7 @@
 						"value": "[variables('imageReference')]"
 					},
 					"customTags": {
-						"value": "[parameters('productionCustomTags')]"
+						"value": "[parameters('coreInfraCustomTags')]"
 					}
 				}
 			}
@@ -1971,7 +2108,7 @@
 						"value": "[variables('imageReference')]"
 					},
 					"customTags": {
-						"value": "[parameters('productionCustomTags')]"
+						"value": "[parameters('toolsCustomTags')]"
 					}
 				}
 			}
@@ -2171,14 +2308,14 @@
 						"value": "[parameters('domainName')]"
 					},
 					"rhsmUsernameOrOrgId": {
-						"value": "[parameters('rhsmUsernameOrOrgId')]"
+						"value": "[parameters('rhsmUsernameOrOrgIdBroker')]"
 					},
 					"rhsmPasswordOrActivationKey": {
 						"reference": {
 							"keyvault": {
 								"id": "[concat('/subscriptions/', parameters('keyVaultSubscriptionId'), '/resourceGroups/', parameters('keyVaultResourceGroup'), '/providers/Microsoft.KeyVault/vaults/', parameters('keyVaultName'))]"
 							},
-							"secretName": "activationKey"
+							"secretName": "activationKeyBroker"
 						}
 					},
 					"rhsmPoolId": {
@@ -2246,8 +2383,11 @@
 							"secretName": "[if(equals(parameters('masterCertType'),'custom'), 'masterkeyfile', 'sshPrivateKey')]"
 						}
 					},
+					"minorVersion": {
+						"value": "[parameters('minorVersion')]"
+					},
 					"customTags": {
-						"value": "[parameters('productionCustomTags')]"
+						"value": "[parameters('coreInfraCustomTags')]"
 					}
 				}
 			}
@@ -2290,21 +2430,21 @@
 						"value": "[parameters('adminUsername')]"
 					},
 					"rhsmUsernameOrOrgId": {
-						"value": "[parameters('rhsmUsernameOrOrgId')]"
+						"value": "[parameters('rhsmUsernameOrOrgIdBroker')]"
 					},
 					"rhsmPasswordOrActivationKey": {
 						"reference": {
 							"keyvault": {
 								"id": "[concat('/subscriptions/', parameters('keyVaultSubscriptionId'), '/resourceGroups/', parameters('keyVaultResourceGroup'), '/providers/Microsoft.KeyVault/vaults/', parameters('keyVaultName'))]"
 							},
-							"secretName": "activationKey"
+							"secretName": "activationKeyBroker"
 						}
 					},
 					"rhsmPoolId": {
 						"value": "[parameters('rhsmBrokerPoolId')]"
 					},
 					"customTags": {
-						"value": "[parameters('productionCustomTags')]"
+						"value": "[parameters('coreInfraCustomTags')]"
 					}
 				}
 			}
@@ -2324,7 +2464,7 @@
 			"properties": {
 				"mode": "Incremental",
 				"templateLink": {
-					"uri": "[variables('nodePrepTemplateUrl')]",
+					"uri": "[variables('infraPrepTemplateUrl')]",
 					"contentVersion": "1.0.0.0"
 				},
 				"parameters": {
@@ -2335,30 +2475,30 @@
 						"value": "[variables('apiVersionCompute')]"
 					},
 					"nodePrepScriptUrl": {
-						"value": "[variables('nodePrepScriptUrl')]"
+						"value": "[variables('infraPrepScriptUrl')]"
 					},
 					"nodePrepScriptFileName": {
-						"value": "[variables('nodePrepScriptFileName')]"
+						"value": "[variables('infraPrepScriptFileName')]"
 					},
 					"openshiftNodeHostname": {
 						"value": "[concat(variables('openshiftInfraHostname'), padLeft(add(copyIndex(), 1), 2, '0'))]"
 					},
 					"rhsmUsernameOrOrgId": {
-						"value": "[parameters('rhsmUsernameOrOrgId')]"
+						"value": "[parameters('rhsmUsernameOrOrgIdBroker')]"
 					},
 					"rhsmPasswordOrActivationKey": {
 						"reference": {
 							"keyvault": {
 								"id": "[concat('/subscriptions/', parameters('keyVaultSubscriptionId'), '/resourceGroups/', parameters('keyVaultResourceGroup'), '/providers/Microsoft.KeyVault/vaults/', parameters('keyVaultName'))]"
 							},
-							"secretName": "activationKey"
+							"secretName": "activationKeyBroker"
 						}
 					},
 					"rhsmPoolId": {
 						"value": "[parameters('rhsmBrokerPoolId')]"
 					},
 					"customTags": {
-						"value": "[parameters('productionCustomTags')]"
+						"value": "[parameters('coreInfraCustomTags')]"
 					}
 				}
 			}
@@ -2389,30 +2529,33 @@
 						"value": "[variables('apiVersionCompute')]"
 					},
 					"nodePrepScriptUrl": {
-						"value": "[variables('nodePrepScriptUrl')]"
+						"value": "[variables('cnsPrepScriptUrl')]"
 					},
 					"nodePrepScriptFileName": {
-						"value": "[variables('nodePrepScriptFileName')]"
+						"value": "[variables('cnsPrepScriptFileName')]"
 					},
 					"openshiftNodeHostname": {
 						"value": "[concat(variables('openshiftCnsHostname'), padLeft(add(copyIndex(), 1), 2, '0'))]"
 					},
 					"rhsmUsernameOrOrgId": {
-						"value": "[parameters('rhsmUsernameOrOrgId')]"
+						"value": "[parameters('rhsmUsernameOrOrgIdCns')]"
 					},
 					"rhsmPasswordOrActivationKey": {
 						"reference": {
 							"keyvault": {
 								"id": "[concat('/subscriptions/', parameters('keyVaultSubscriptionId'), '/resourceGroups/', parameters('keyVaultResourceGroup'), '/providers/Microsoft.KeyVault/vaults/', parameters('keyVaultName'))]"
 							},
-							"secretName": "activationKey"
+							"secretName": "activationKeyCns"
 						}
 					},
-					"rhsmPoolId": {
-						"value": "[parameters('rhsmPoolId')]"
+					"rhsmPoolId1": {
+						"value": "[parameters('rhsmPoolId1')]"
+					},
+					"rhsmPoolId2": {
+						"value": "[parameters('rhsmPoolId2')]"
 					},
 					"customTags": {
-						"value": "[parameters('productionCustomTags')]"
+						"value": "[parameters('coreInfraCustomTags')]"
 					}
 				}
 			}
@@ -2452,21 +2595,24 @@
 						"value": "[concat(variables('openshiftToolsNodeHostname'), padLeft(add(copyIndex(), 1), 2, '0'))]"
 					},
 					"rhsmUsernameOrOrgId": {
-						"value": "[parameters('rhsmUsernameOrOrgId')]"
+						"value": "[parameters('rhsmUsernameOrOrgIdCompute')]"
 					},
 					"rhsmPasswordOrActivationKey": {
 						"reference": {
 							"keyvault": {
 								"id": "[concat('/subscriptions/', parameters('keyVaultSubscriptionId'), '/resourceGroups/', parameters('keyVaultResourceGroup'), '/providers/Microsoft.KeyVault/vaults/', parameters('keyVaultName'))]"
 							},
-							"secretName": "activationKey"
+							"secretName": "activationKeyCompute"
 						}
 					},
-					"rhsmPoolId": {
-						"value": "[parameters('rhsmPoolId')]"
+					"rhsmPoolId1": {
+						"value": "[parameters('rhsmPoolId1')]"
+					},
+					"rhsmPoolId2": {
+						"value": "[parameters('rhsmPoolId2')]"
 					},
 					"customTags": {
-						"value": "[parameters('productionCustomTags')]"
+						"value": "[parameters('toolsCustomTags')]"
 					}
 				}
 			}
@@ -2506,18 +2652,21 @@
 						"value": "[concat(variables('openshiftProductionNodeHostname'), padLeft(add(copyIndex(), 1), 2, '0'))]"
 					},
 					"rhsmUsernameOrOrgId": {
-						"value": "[parameters('rhsmUsernameOrOrgId')]"
+						"value": "[parameters('rhsmUsernameOrOrgIdCompute')]"
 					},
 					"rhsmPasswordOrActivationKey": {
 						"reference": {
 							"keyvault": {
 								"id": "[concat('/subscriptions/', parameters('keyVaultSubscriptionId'), '/resourceGroups/', parameters('keyVaultResourceGroup'), '/providers/Microsoft.KeyVault/vaults/', parameters('keyVaultName'))]"
 							},
-							"secretName": "activationKey"
+							"secretName": "activationKeyCompute"
 						}
 					},
-					"rhsmPoolId": {
-						"value": "[parameters('rhsmPoolId')]"
+					"rhsmPoolId1": {
+						"value": "[parameters('rhsmPoolId1')]"
+					},
+					"rhsmPoolId2": {
+						"value": "[parameters('rhsmPoolId2')]"
 					},
 					"customTags": {
 						"value": "[parameters('productionCustomTags')]"
@@ -2560,18 +2709,21 @@
 						"value": "[concat(variables('openshiftAcceptanceNodeHostname'), padLeft(add(copyIndex(), 1), 2, '0'))]"
 					},
 					"rhsmUsernameOrOrgId": {
-						"value": "[parameters('rhsmUsernameOrOrgId')]"
+						"value": "[parameters('rhsmUsernameOrOrgIdCompute')]"
 					},
 					"rhsmPasswordOrActivationKey": {
 						"reference": {
 							"keyvault": {
 								"id": "[concat('/subscriptions/', parameters('keyVaultSubscriptionId'), '/resourceGroups/', parameters('keyVaultResourceGroup'), '/providers/Microsoft.KeyVault/vaults/', parameters('keyVaultName'))]"
 							},
-							"secretName": "activationKey"
+							"secretName": "activationKeyCompute"
 						}
 					},
-					"rhsmPoolId": {
-						"value": "[parameters('rhsmPoolId')]"
+					"rhsmPoolId1": {
+						"value": "[parameters('rhsmPoolId1')]"
+					},
+					"rhsmPoolId2": {
+						"value": "[parameters('rhsmPoolId2')]"
 					},
 					"customTags": {
 						"value": "[parameters('acceptanceCustomTags')]"
@@ -2649,10 +2801,10 @@
 					"openshiftToolsNodeHostname": {
 						"value": "[variables('openshiftToolsNodeHostname')]"
 					},
-					"openshiftProductionNodeHostname": {
+					"openshiftProdTestNodeHostname": {
 						"value": "[variables('openshiftProductionNodeHostname')]"
 					},
-					"openshiftAcceptanceNodeHostname": {
+					"openshiftAccDevNodeHostname": {
 						"value": "[variables('openshiftAcceptanceNodeHostname')]"
 					},
 					"masterInstanceCount": {
@@ -2667,10 +2819,10 @@
 					"toolsNodeInstanceCount": {
 						"value": "[parameters('toolsNodeInstanceCount')]"
 					},
-					"productionNodeInstanceCount": {
+					"prodtestNodeInstanceCount": {
 						"value": "[parameters('productionNodeInstanceCount')]"
 					},
-					"acceptanceNodeInstanceCount": {
+					"accdevNodeInstanceCount": {
 						"value": "[parameters('acceptanceNodeInstanceCount')]"
 					},
 					"storageKind": {
@@ -2723,7 +2875,10 @@
 						"value": "[concat(parameters('routingSubDomainType'), 'Domain')]"
 					},
 					"customTags": {
-						"value": "[parameters('productionCustomTags')]"
+						"value": "[parameters('coreInfraCustomTags')]"
+					},
+					"hostSuffix": {
+						"value": "0"
 					},
 					"virtualNetworkName": {
 						"value": "[parameters('virtualNetworkName')]"
@@ -2748,6 +2903,31 @@
 					},
 					"masterCertType": {
 						"value": "[parameters('masterCertType')]"
+					},
+					"omsWorkspaceId": {
+						"reference": {
+							"keyvault": {
+								"id": "[concat('/subscriptions/', parameters('keyVaultSubscriptionId'), '/resourceGroups/', parameters('keyVaultResourceGroup'), '/providers/Microsoft.KeyVault/vaults/', parameters('keyVaultName'))]"
+							},
+							"secretName": "omsWorkspaceId"
+						}
+					},
+					"omsWorkspaceKey": {
+						"reference": {
+							"keyvault": {
+								"id": "[concat('/subscriptions/', parameters('keyVaultSubscriptionId'), '/resourceGroups/', parameters('keyVaultResourceGroup'), '/providers/Microsoft.KeyVault/vaults/', parameters('keyVaultName'))]"
+							},
+							"secretName": "omsWorkspaceKey"
+						}
+					},
+					"projectRequestMessage": {
+						"value": "[parameters('projectRequestMessage')]"
+					},
+					"minorVersion": {
+						"value": "[parameters('minorVersion')]"
+					},
+					"clusterType": {
+						"value": "prodacc"
 					}
 				}
 			}

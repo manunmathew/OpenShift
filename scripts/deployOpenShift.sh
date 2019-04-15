@@ -36,13 +36,19 @@ export NODEAVAILIBILITYSET=${29}
 export MASTERCLUSTERTYPE=${30}
 export PRIVATEIP=${31}
 export PRIVATEDNS=${32}
-export PRODUCTION=${33}
-export ACCEPTANCE=${34}
+export PRODTEST=${33}
+export ACCDEV=${34}
 export CUSTOMROUTINGCERTTYPE=${35}
 export CUSTOMMASTERCERTTYPE=${36}
-export PRODUCTIONCOUNT="${37}"
-export ACCEPTANCECOUNT="${38}"
+export PRODTESTCOUNT="${37}"
+export ACCDEVCOUNT="${38}"
 export DOMAIN="${39}"
+export HOSTSUFFIX=${40}
+export CLUSTERTYPE=${41}
+export MINORVERSION=${42}
+export PROJREQMSG="${43}"
+export WSID=${44}
+export WSKEY=${45}
 
 export BASTION=$(hostname)
 
@@ -73,6 +79,9 @@ sed -i -e '/Defaults    env_keep += "LC_TIME LC_ALL LANGUAGE LINGUAS _XKB_CHARSE
 if [[ $CLOUD == "US" ]]
 then
     export DOCKERREGISTRYREALM="core.usgovcloudapi.net"
+elif [[ $CLOUD == "CH" ]]
+then
+	export DOCKERREGISTRYREALM="core.chinacloudapi.cn"
 else
     export DOCKERREGISTRYREALM="core.windows.net"
 fi
@@ -81,10 +90,10 @@ fi
 if [[ $AZURE == "true" ]]
 then
     CLOUDKIND="openshift_cloudprovider_kind=azure
-openshift_cloudprovider_azure_client_id=\"{{ aadClientId }}\"
-openshift_cloudprovider_azure_client_secret=\"{{ aadClientSecret }}\"
-openshift_cloudprovider_azure_tenant_id=\"{{ tenantId }}\"
-openshift_cloudprovider_azure_subscription_id=\"{{ subscriptionId }}\"
+openshift_cloudprovider_azure_client_id=$AADCLIENTID
+openshift_cloudprovider_azure_client_secret=$AADCLIENTSECRET
+openshift_cloudprovider_azure_tenant_id=$TENANTID
+openshift_cloudprovider_azure_subscription_id=$SUBSCRIPTIONID
 openshift_cloudprovider_azure_cloud=$CLOUDNAME
 openshift_cloudprovider_azure_vnet_name=$VNETNAME
 openshift_cloudprovider_azure_security_group_name=$NODENSG
@@ -98,6 +107,18 @@ openshift_cloudprovider_azure_location=$LOCATION"
 	else
 		SCKIND="openshift_storageclass_parameters={'kind': 'shared', 'storageaccounttype': 'Premium_LRS'}"
 	fi
+fi
+
+# Create custom node group definitions
+if [[ $CLUSTERTYPE == "prodacc" ]]
+then
+	prodtestnode=production
+	accdevnode=acceptance
+	NODEGROUP="openshift_node_groups=[{'name': 'node-config-master', 'labels': ['node-role.kubernetes.io/master=true']}, {'name': 'node-config-infra', 'labels': ['node-role.kubernetes.io/infra=true']}, {'name': 'node-config-compute-cns', 'labels': ['nodepool=cns']}, {'name': 'node-config-compute-tools', 'labels': ['node-role.kubernetes.io/compute=true', 'nodepool=ToolsProduction']}, {'name': 'node-config-compute-acceptance', 'labels': ['node-role.kubernetes.io/compute=true', 'nodepool=Acceptance']}, {'name': 'node-config-compute-production', 'labels': ['node-role.kubernetes.io/compute=true', 'nodepool=Production']}]"
+else
+	prodtestnode=test
+	accdevnode=development
+	NODEGROUP="openshift_node_groups=[{'name': 'node-config-master', 'labels': ['node-role.kubernetes.io/master=true']}, {'name': 'node-config-infra', 'labels': ['node-role.kubernetes.io/infra=true']}, {'name': 'node-config-compute-cns', 'labels': ['nodepool=cns']}, {'name': 'node-config-compute-tools', 'labels': ['node-role.kubernetes.io/compute=true', 'nodepool=ToolsAcceptance']}, {'name': 'node-config-compute-development', 'labels': ['node-role.kubernetes.io/compute=true', 'nodepool=Development']}, {'name': 'node-config-compute-test', 'labels': ['node-role.kubernetes.io/compute=true', 'nodepool=Test']}]"
 fi
 
 # Cloning Ansible playbook repository
@@ -137,9 +158,8 @@ fi
 echo $(date) " - Create variable for master cluster address based on cluster type"
 if [[ $MASTERCLUSTERTYPE == "private" ]]
 then
-	MASTERCLUSTERADDRESS="openshift_master_cluster_hostname=${MASTER}01
-openshift_master_cluster_public_hostname=$PRIVATEDNS
-openshift_master_cluster_public_vip=$PRIVATEIP"
+	MASTERCLUSTERADDRESS="openshift_master_cluster_hostname=${MASTER}${HOSTSUFFIX}1
+openshift_master_cluster_public_hostname=$PRIVATEDNS"
 else
 	MASTERCLUSTERADDRESS="openshift_master_cluster_hostname=$MASTERPUBLICIPHOSTNAME
 openshift_master_cluster_public_hostname=$MASTERPUBLICIPHOSTNAME
@@ -148,55 +168,21 @@ fi
 
 # Create Master nodes grouping
 echo $(date) " - Creating Master nodes grouping"
-if [ $MASTERCOUNT -gt 9 ]
-then
-	MASTERLIST=$MASTERCOUNT
-	# If more than 10 master nodes need to create groups 01 - 09 separately than 10 and higher
-	for (( c=1; c<=9; c++ ))
-	do
-    mastergroup="$mastergroup
-${MASTER}0$c openshift_hostname=${MASTER}0$c openshift_node_group_name='node-config-master'"
-	done
+MASTERLIST="${HOSTSUFFIX}$MASTERCOUNT"
 
-	for (( c=10; c<=$MASTERCOUNT; c++ ))
-	do
-    mastergroup="$mastergroup
-$MASTER$c openshift_hostname=$MASTER$c openshift_node_group_name='node-config-master'"
-	done
-else
-	MASTERLIST="0$MASTERCOUNT"
-	# If less than 10 master nodes
-	for (( c=1; c<=$MASTERCOUNT; c++ ))
-	do
-    mastergroup="$mastergroup
-${MASTER}0$c openshift_hostname=${MASTER}0$c openshift_node_group_name='node-config-master'"
-	done
-fi
+for (( c=1; c<=$MASTERCOUNT; c++ ))
+do
+	mastergroup="$mastergroup
+${MASTER}${HOSTSUFFIX}$c openshift_node_group_name='node-config-master'"
+done
 
 # Create Infra nodes grouping 
 echo $(date) " - Creating Infra nodes grouping"
-if [ $INFRACOUNT -gt 9 ]
-then
-	# If more than 10 infra nodes need to create groups 01 - 09 separately than 10 and higher
-	for (( c=1; c<=$9; c++ ))
-	do
-    infragroup="$infragroup
-${INFRA}0$c openshift_hostname=${INFRA}0$c openshift_node_group_name='node-config-infra'"
-	done
-
-	for (( c=10; c=<$INFRACOUNT; c++ ))
-	do
-    infragroup="$infragroup
-$INFRA$c openshift_hostname=$INFRA$c openshift_node_group_name='node-config-infra'"
-	done
-else
-	# If less than 10 infra nodes
-	for (( c=1; c<=$INFRACOUNT; c++ ))
-	do
-    infragroup="$infragroup
-${INFRA}0$c openshift_hostname=${INFRA}0$c openshift_node_group_name='node-config-infra'"
-	done
-fi
+for (( c=1; c<=$INFRACOUNT; c++ ))
+do
+	infragroup="$infragroup
+${INFRA}${HOSTSUFFIX}$c openshift_node_group_name='node-config-infra'"
+done
 
 # Create Tools node grouping
 echo $(date) " - Creating Nodes grouping"
@@ -206,95 +192,79 @@ then
 	for (( c=1; c<=9; c++ ))
 	do
 		toolsnodegroup="$toolsnodegroup
-${TOOLS}0$c openshift_hostname=${TOOLS}0$c openshift_node_group_name='node-config-compute-tools'"
+${TOOLS}0$c openshift_node_group_name='node-config-compute-tools'"
 	done
 
 	for (( c=10; c<=$TOOLSCOUNT; c++ ))
 	do
 		toolsnodegroup="$toolsnodegroup
-$TOOLS$c openshift_hostname=$TOOLS$c openshift_node_group_name='node-config-compute-tools'"
+$TOOLS$c openshift_node_group_name='node-config-compute-tools'"
 	done
 else
 	# If less than 10 tools nodes
 	for (( c=1; c<=$TOOLSCOUNT; c++ ))
 	do
 		toolsnodegroup="$toolsnodegroup
-${TOOLS}0$c openshift_hostname=${TOOLS}0$c openshift_node_group_name='node-config-compute-tools'"
+${TOOLS}0$c openshift_node_group_name='node-config-compute-tools'"
 	done
 fi
 
-# Create Production node grouping
+# Create Production / Test node grouping
 echo $(date) " - Creating Nodes grouping"
-if [ $PRODUCTIONCOUNT -gt 9 ]
+if [ $PRODTESTCOUNT -gt 9 ]
 then
 	# If more than 10 production nodes need to create groups 01 - 09 separately than 10 and higher
 	for (( c=1; c<=9; c++ ))
 	do
-    productionnodegroup="$productionnodegroup
-${PRODUCTION}0$c openshift_hostname=${PRODUCTION}0$c openshift_node_group_name='node-config-compute-production'"
+    prodtestnodegroup="$prodtestnodegroup
+${PRODTEST}0$c openshift_node_group_name='node-config-compute-$prodtestnode'"
 	done
 
-	for (( c=10; c<=$PRODUCTIONCOUNT; c++ ))
+	for (( c=10; c<=$PRODTESTCOUNT; c++ ))
 	do
-    productionnodegroup="$productionnodegroup
-$PRODUCTION$c openshift_hostname=$PRODUCTION$c openshift_node_group_name='node-config-compute-production'"
+    prodtestnodegroup="$prodtestnodegroup
+$PRODTEST$c openshift_node_group_name='node-config-compute-$prodtestnode'"
 	done
 else
 	# If less than 10 tools nodes
-	for (( c=1; c<=$PRODUCTIONCOUNT; c++ ))
+	for (( c=1; c<=$PRODTESTCOUNT; c++ ))
 	do
-    productionnodegroup="$productionnodegroup
-${PRODUCTION}0$c openshift_hostname=${PRODUCTION}0$c openshift_node_group_name='node-config-compute-production'"
+    prodtestnodegroup="$prodtestnodegroup
+${PRODTEST}0$c openshift_node_group_name='node-config-compute-$prodtestnode'"
 	done
 fi
 
-# Create Acceptance node grouping
+# Create Acceptance / Development node grouping
 echo $(date) " - Creating Nodes grouping"
-if [ $ACCEPTANCECOUNT -gt 9 ]
+if [ $ACCDEVCOUNT -gt 9 ]
 then
 	# If more than 10 acceptance nodes need to create groups 01 - 09 separately than 10 and higher
 	for (( c=1; c<=9; c++ ))
 	do
-		acceptancenodegroup="$acceptancenodegroup
-${ACCEPTANCE}0$c openshift_hostname=${ACCEPTANCE}0$c openshift_node_group_name='node-config-compute-acceptance'"
+		accdevnodegroup="$accdevnodegroup
+${ACCDEV}0$c openshift_node_group_name='node-config-compute-$accdevnode'"
 	done
 	
-	for (( c=10; c<=$ACCEPTANCECOUNT; c++ ))
+	for (( c=10; c<=$ACCDEVCOUNT; c++ ))
 	do
-		acceptancenodegroup="$acceptancenodegroup
-$ACCEPTANCE$c openshift_hostname=$ACCEPTANCE$c openshift_node_group_name='node-config-compute-acceptance'"
+		accdevnodegroup="$accdevnodegroup
+$ACCDEV$c openshift_node_group_name='node-config-compute-$accdevnode'"
 	done
 else
-	for (( c=1; c<=$ACCEPTANCECOUNT; c++ ))
+	for (( c=1; c<=$ACCDEVCOUNT; c++ ))
 	do
-		acceptancenodegroup="$acceptancenodegroup
-${ACCEPTANCE}0$c openshift_hostname=${ACCEPTANCE}0$c openshift_node_group_name='node-config-compute-acceptance'"
+		accdevnodegroup="$accdevnodegroup
+${ACCDEV}0$c openshift_node_group_name='node-config-compute-$accdevnode'"
 	done
 fi
 
 # Create CNS nodes grouping if CNS is enabled
 echo $(date) " - Creating CNS nodes grouping"
-if [ $CNSCOUNT -gt 9 ]
-then
-	# If more than 10 cns nodes need to create groups 01 - 09 separately than 10 and higher
-    for (( c=1; c<=9; c++ ))
-    do
-        cnsgroup="$cnsgroup
-${CNS}0$c openshift_hostname=${CNS}0$c openshift_node_group_name='node-config-compute-cns'"
-    done
-
-	for (( c=10; c<=$CNSCOUNT; c++ ))
-    do
-        cnsgroup="$cnsgroup
-$CNS$c openshift_hostname=$CNS$c openshift_node_group_name='node-config-compute-cns'"
-    done
-else
-	for (( c=1; c<=$CNSCOUNT; c++ ))
-    do
-        cnsgroup="$cnsgroup
-${CNS}0$c openshift_hostname=${CNS}0$c openshift_node_group_name='node-config-compute-cns'"
-    done
-fi
+for (( c=1; c<=$CNSCOUNT; c++ ))
+do
+	cnsgroup="$cnsgroup
+${CNS}${HOSTSUFFIX}$c openshift_node_group_name='node-config-compute-cns'"
+done
 
 # Setting the HA Mode if more than one master
 if [ $MASTERCOUNT != 1 ]
@@ -313,8 +283,8 @@ $infragroup
 $nodegroup
 $cnsgroup
 $toolsnodegroup
-$productionnodegroup
-$acceptancenodegroup
+$prodtestnodegroup
+$accdevnodegroup
 EOF
 
 # Run a loop playbook to ensure DNS Hostname resolution is working prior to continuing with script
@@ -333,13 +303,13 @@ then
 	
     for (( c=1; c<=$CNSCOUNT; c++ ))
     do
-        runuser $SUDOUSER -c "ssh-keyscan -H ${CNS}0$c >> ~/.ssh/known_hosts"
-        drive=$(runuser $SUDOUSER -c "ssh ${CNS}0$c 'sudo /usr/sbin/fdisk -l'" | awk '$1 == "Disk" && $2 ~ /^\// && ! /mapper/ {if (drive) print drive; drive = $2; sub(":", "", drive);} drive && /^\// {drive = ""} END {if (drive) print drive;}')
+        runuser $SUDOUSER -c "ssh-keyscan -H ${CNS}${HOSTSUFFIX}$c >> ~/.ssh/known_hosts"
+        drive=$(runuser $SUDOUSER -c "ssh ${CNS}${HOSTSUFFIX}$c 'sudo /usr/sbin/fdisk -l'" | awk '$1 == "Disk" && $2 ~ /^\// && ! /mapper/ {if (drive) print drive; drive = $2; sub(":", "", drive);} drive && /^\// {drive = ""} END {if (drive) print drive;}')
         drive1=$(echo $drive | cut -d ' ' -f 1)
         drive2=$(echo $drive | cut -d ' ' -f 2)
         drive3=$(echo $drive | cut -d ' ' -f 3)
         cnsglusterinfo="$cnsglusterinfo
-${CNS}0$c glusterfs_devices='[ \"${drive1}\", \"${drive2}\", \"${drive3}\" ]'"
+${CNS}${HOSTSUFFIX}$c glusterfs_devices='[ \"${drive1}\", \"${drive2}\", \"${drive3}\" ]'"
     done
 fi
 
@@ -361,10 +331,11 @@ new_nodes
 ansible_ssh_user=$SUDOUSER
 ansible_become=yes
 openshift_install_examples=true
+openshift_deployment_type=openshift-enterprise
 deployment_type=openshift-enterprise
 openshift_release=v3.11
-#openshift_image_tag=v3.11
-#openshift_pkg_version=-3.11
+openshift_image_tag=v${MINORVERSION}
+openshift_pkg_version=-${MINORVERSION}
 docker_udev_workaround=True
 openshift_use_dnsmasq=true
 openshift_master_default_subdomain=$ROUTING
@@ -384,7 +355,7 @@ $ROUTINGCERTIFICATE
 $MASTERCERTIFICATE
 
 # Custom node group definitions
-openshift_node_groups=[{'name': 'node-config-master', 'labels': ['node-role.kubernetes.io/master=true']}, {'name': 'node-config-infra', 'labels': ['node-role.kubernetes.io/infra=true']}, {'name': 'node-config-compute-cns', 'labels': ['nodepool=cns']}, {'name': 'node-config-compute-tools', 'labels': ['node-role.kubernetes.io/compute=true', 'nodepool=ToolsProduction']}, {'name': 'node-config-compute-acceptance', 'labels': ['node-role.kubernetes.io/compute=true', 'nodepool=Acceptance']}, {'name': 'node-config-compute-production', 'labels': ['node-role.kubernetes.io/compute=true', 'nodepool=Production']}]
+$NODEGROUP
 
 # Workaround for docker image failure
 # https://access.redhat.com/solutions/3480921
@@ -403,6 +374,13 @@ openshift_hosted_registry_storage_azure_blob_accountname=$REGISTRYSA
 openshift_hosted_registry_storage_azure_blob_accountkey=$ACCOUNTKEY
 openshift_hosted_registry_storage_azure_blob_container=registry
 openshift_hosted_registry_storage_azure_blob_realm=$DOCKERREGISTRYREALM
+#openshift_hosted_registry_routetermination=reencrypt
+
+# Specify CNS images
+openshift_storage_glusterfs_image=registry.access.redhat.com/rhgs3/rhgs-server-rhel7:v3.11
+openshift_storage_glusterfs_block_image=registry.access.redhat.com/rhgs3/rhgs-gluster-block-prov-rhel7:v3.11
+openshift_storage_glusterfs_s3_image=registry.access.redhat.com/rhgs3/rhgs-s3-server-rhel7:v3.11
+openshift_storage_glusterfs_heketi_image=registry.access.redhat.com/rhgs3/rhgs-volmanager-rhel7:v3.11
 
 # Deploy Service Catalog
 openshift_enable_service_catalog=false
@@ -430,7 +408,7 @@ openshift_metrics_heapster_nodeselector={"node-role.kubernetes.io/infra":"true"}
 
 # Setup logging
 openshift_logging_install_logging=false
-openshift_logging_fluentd_nodeselector={"logging":"true"}
+#openshift_logging_fluentd_nodeselector={"logging":"true"}
 openshift_logging_es_nodeselector={"node-role.kubernetes.io/infra":"true"}
 openshift_logging_kibana_nodeselector={"node-role.kubernetes.io/infra":"true"}
 openshift_logging_curator_nodeselector={"node-role.kubernetes.io/infra":"true"}
@@ -438,14 +416,14 @@ openshift_logging_curator_nodeselector={"node-role.kubernetes.io/infra":"true"}
 
 # host group for masters
 [masters]
-$MASTER[01:${MASTERLIST}]
+$MASTER[${HOSTSUFFIX}1:${MASTERLIST}]
 
 # host group for etcd
 [etcd]
-$MASTER[01:${MASTERLIST}]
+$MASTER[${HOSTSUFFIX}1:${MASTERLIST}]
 
 [master0]
-${MASTER}01
+${MASTER}${HOSTSUFFIX}1
 
 # Only populated when CNS is enabled
 [glusterfs]
@@ -456,13 +434,17 @@ $cnsglusterinfo
 $mastergroup
 $infragroup
 $toolsnodegroup
-$productionnodegroup
-$acceptancenodegroup
+$prodtestnodegroup
+$accdevnodegroup
 $cnsgroup
 
 # host group for adding new nodes
 [new_nodes]
 EOF
+
+# Update WALinuxAgent
+echo $(date) " - Updating WALinuxAgent on all cluster nodes"
+runuser $SUDOUSER -c "ansible all -f 30 -b -m yum -a 'name=WALinuxAgent state=latest'"
 
 # Setup NetworkManager to manage eth0
 echo $(date) " - Running NetworkManager playbook"
@@ -485,12 +467,12 @@ sleep 20
 
 # Run OpenShift Container Platform prerequisites playbook
 echo $(date) " - Running Prerequisites via Ansible Playbook"
-runuser -l $SUDOUSER -c "ansible-playbook -e openshift_cloudprovider_azure_client_id=$AADCLIENTID -e openshift_cloudprovider_azure_client_secret=\"$AADCLIENTSECRET\" -e openshift_cloudprovider_azure_tenant_id=$TENANTID -e openshift_cloudprovider_azure_subscription_id=$SUBSCRIPTIONID -f 30 /usr/share/ansible/openshift-ansible/playbooks/prerequisites.yml"
+runuser -l $SUDOUSER -c "ansible-playbook -f 30 /usr/share/ansible/openshift-ansible/playbooks/prerequisites.yml"
 echo $(date) " - Prerequisites check complete"
 
 # Initiating installation of OpenShift Container Platform using Ansible Playbook
 echo $(date) " - Installing OpenShift Container Platform via Ansible Playbook"
-runuser -l $SUDOUSER -c "ansible-playbook -e openshift_cloudprovider_azure_client_id=$AADCLIENTID -e openshift_cloudprovider_azure_client_secret=\"$AADCLIENTSECRET\" -e openshift_cloudprovider_azure_tenant_id=$TENANTID -e openshift_cloudprovider_azure_subscription_id=$SUBSCRIPTIONID -f 30 /usr/share/ansible/openshift-ansible/playbooks/deploy_cluster.yml"
+runuser -l $SUDOUSER -c "ansible-playbook -f 30 /usr/share/ansible/openshift-ansible/playbooks/deploy_cluster.yml"
 if [ $? -eq 0 ]
 then
     echo $(date) " - OpenShift Cluster installed successfully"
@@ -502,7 +484,7 @@ fi
 # Install OpenShift Atomic Client
 cd /root
 mkdir .kube
-runuser ${SUDOUSER} -c "scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${SUDOUSER}@${MASTER}01:~/.kube/config /tmp/kube-config"
+runuser ${SUDOUSER} -c "scp -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ${SUDOUSER}@${MASTER}${HOSTSUFFIX}1:~/.kube/config /tmp/kube-config"
 cp /tmp/kube-config /root/.kube/config
 mkdir /home/${SUDOUSER}/.kube
 cp /tmp/kube-config /home/${SUDOUSER}/.kube/config
@@ -519,14 +501,15 @@ echo $(date) " - Assigning cluster admin rights to user"
 runuser $SUDOUSER -c "ansible-playbook -f 30 ~/openshift-container-platform-playbooks/assignclusteradminrights.yaml"
 
 # Adding some labels back because they go missing
-echo $(date) " - Adding api and logging labels"
-runuser -l $SUDOUSER -c  "oc label --overwrite nodes ${MASTER}01 openshift-infra=apiserver"
-runuser -l $SUDOUSER -c  "oc label --overwrite nodes --all logging-infra-fluentd=true logging=true"
+# echo $(date) " - Adding api and logging labels"
+# runuser -l $SUDOUSER -c  "oc label --overwrite nodes ${MASTER}${HOSTSUFFIX}1 openshift-infra=apiserver"
+# runuser -l $SUDOUSER -c  "oc label --overwrite nodes --all logging-infra-fluentd=true logging=true"
 
 # Installing Service Catalog, Ansible Service Broker and Template Service Broker
 if [[ $AZURE == "true" || $ENABLECNS == "true" ]]
 then
-    runuser -l $SUDOUSER -c "ansible-playbook -e openshift_cloudprovider_azure_client_id=$AADCLIENTID -e openshift_cloudprovider_azure_client_secret=\"$AADCLIENTSECRET\" -e openshift_cloudprovider_azure_tenant_id=$TENANTID -e openshift_cloudprovider_azure_subscription_id=$SUBSCRIPTIONID -e openshift_enable_service_catalog=true -f 30 /usr/share/ansible/openshift-ansible/playbooks/openshift-service-catalog/config.yml"
+	echo $(date) " - Installing Service Catalog, Ansible service broker, and template service broker."
+    runuser -l $SUDOUSER -c "ansible-playbook -e openshift_enable_service_catalog=true -f 30 /usr/share/ansible/openshift-ansible/playbooks/openshift-service-catalog/config.yml"
 fi
 
 # Configure Metrics
@@ -536,7 +519,7 @@ then
     echo $(date) "- Deploying Metrics"
     if [[ $AZURE == "true" || $ENABLECNS == "true" ]]
     then
-        runuser -l $SUDOUSER -c "ansible-playbook -e openshift_cloudprovider_azure_client_id=$AADCLIENTID -e openshift_cloudprovider_azure_client_secret=\"$AADCLIENTSECRET\" -e openshift_cloudprovider_azure_tenant_id=$TENANTID -e openshift_cloudprovider_azure_subscription_id=$SUBSCRIPTIONID -e openshift_metrics_install_metrics=True -e openshift_metrics_cassandra_storage_type=dynamic -f 30 /usr/share/ansible/openshift-ansible/playbooks/openshift-metrics/config.yml"
+        runuser -l $SUDOUSER -c "ansible-playbook -e openshift_metrics_install_metrics=True -e openshift_metrics_cassandra_storage_type=dynamic -f 30 /usr/share/ansible/openshift-ansible/playbooks/openshift-metrics/config.yml"
     else
         runuser -l $SUDOUSER -c "ansible-playbook -e openshift_metrics_install_metrics=True /usr/share/ansible/openshift-ansible/playbooks/openshift-metrics/config.yml"
     fi
@@ -557,7 +540,7 @@ then
     echo $(date) "- Deploying Logging"
     if [[ $AZURE == "true" || $ENABLECNS == "true" ]]
     then
-        runuser -l $SUDOUSER -c "ansible-playbook -e openshift_cloudprovider_azure_client_id=$AADCLIENTID -e openshift_cloudprovider_azure_client_secret=\"$AADCLIENTSECRET\" -e openshift_cloudprovider_azure_tenant_id=$TENANTID -e openshift_cloudprovider_azure_subscription_id=$SUBSCRIPTIONID -e openshift_logging_install_logging=True -e openshift_logging_es_pvc_dynamic=true -f 30 /usr/share/ansible/openshift-ansible/playbooks/openshift-logging/config.yml"
+        runuser -l $SUDOUSER -c "ansible-playbook -e openshift_logging_install_logging=True -e openshift_logging_es_pvc_dynamic=true -f 30 /usr/share/ansible/openshift-ansible/playbooks/openshift-logging/config.yml"
     else
         runuser -l $SUDOUSER -c "ansible-playbook -e openshift_logging_install_logging=True -f 30 /usr/share/ansible/openshift-ansible/playbooks/openshift-logging/config.yml"
     fi
@@ -570,7 +553,7 @@ then
     fi
 fi
 
-# Creating variables file for private master configuration playbook
+# Creating variables file for private master and Azure AD configuration playbook
 echo $(date) " - Creating variables file for future playbooks"
 cat > /home/$SUDOUSER/openshift-container-platform-playbooks/vars.yaml <<EOF
 admin_user: $SUDOUSER
@@ -578,20 +561,158 @@ master_lb_private_dns: $PRIVATEDNS
 domain: $DOMAIN
 EOF
 
+# Creating file for Azure AD configuration playbook
+echo $(date) " - Creating Azure AD configuration playbook"
+cat > /home/$SUDOUSER/openshift-container-platform-playbooks/aad.yaml <<EOF
+  - name: AzureAD
+    challenge: false
+    login: true
+    mappingMethod: claim
+    provider:
+      apiVersion: v1
+      kind: OpenIDIdentityProvider
+      clientID: $AADCLIENTID
+      clientSecret: $AADCLIENTSECRET
+      claims:
+        id:
+        - sub
+        preferredUsername:
+        - unique_name
+        name:
+        - name
+        email:
+        - email
+      urls:
+        authorize: https://login.microsoftonline.com/$TENANTID/oauth2/authorize
+        token: https://login.microsoftonline.com/$TENANTID/oauth2/token
+EOF
+
+# Configure for Azure AD Authentication
+echo $(date) " - Configure cluster for Azure AD Authentication"
+runuser -l $SUDOUSER -c "ansible-playbook -f 30 ~/openshift-container-platform-playbooks/add-azuread-auth.yaml -e @~/openshift-container-platform-playbooks/vars.yaml"
+
+if [ $? -eq 0 ]
+then
+	echo $(date) " - Azure AD authentication configuration added to master-config.yaml"
+else
+	echo $(date) " - Failed to add Azure AD authentication configuration to master-config.yaml"
+fi
+
+# Configure OMS Agent Daemonset
+if [[ -n "$WSID" || $WSID != "" ]]
+then
+
+sleep 15
+echo $(date) " - Configuring OMS Agent Daemonset"
+
+export WSIDBASE64=$(echo $WSID | base64 | tr -d '\n')
+export WSKEYBASE64=$(echo $WSKEY | base64 | tr -d '\n')
+
+# Create oms secret yaml
+cat > /home/$SUDOUSER/openshift-container-platform-playbooks/oms-secret.yaml <<EOF
+apiVersion: v1
+kind: Secret
+metadata:
+  name: omsagent-secret
+data:
+  WSID: $WSIDBASE64
+  KEY: $WSKEYBASE64
+EOF
+
+# Create daemonset yaml
+cat > /home/$SUDOUSER/openshift-container-platform-playbooks/oms-agent.yaml <<EOF
+apiVersion: extensions/v1beta1
+kind: DaemonSet
+metadata:
+  name: oms
+spec:
+  selector:
+    matchLabels:
+      name: omsagent
+  template:
+    metadata:
+      labels:
+        name: omsagent
+        agentVersion: 1.8.1-256
+        dockerProviderVersion: 1.0.0-35
+    spec:
+      serviceAccount: omsagent
+      containers:
+      - image: "microsoft/oms"
+        imagePullPolicy: Always
+        name: omsagent
+        securityContext:
+          privileged: true
+        ports:
+        - containerPort: 25225
+          protocol: TCP
+        - containerPort: 25224
+          protocol: UDP
+        volumeMounts:
+        - mountPath: /var/run/docker.sock
+          name: docker-sock
+        - mountPath: /etc/omsagent-secret
+          name: omsagent-secret
+          readOnly: true
+        - mountPath: /var/lib/docker/containers 
+          name: containerlog-path
+        livenessProbe:
+          exec:
+            command:
+              - /bin/bash
+              - -c
+              - ps -ef | grep omsagent | grep -v "grep"
+          initialDelaySeconds: 60
+          periodSeconds: 60
+      volumes:
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
+      - name: omsagent-secret
+        secret:
+          secretName: omsagent-secret
+      - name: containerlog-path
+        hostPath:
+          path: /var/lib/docker/containers
+EOF
+
+echo $(date) " - Creating omslogging project, service account and setting proper policies.  Create secret and daemonset."
+oc adm new-project omslogging --node-selector=''
+oc project omslogging
+oc create serviceaccount omsagent
+oc adm policy add-cluster-role-to-user cluster-reader system:serviceaccount:omslogging:omsagent
+oc adm policy add-scc-to-user privileged system:serviceaccount:omslogging:omsagent
+
+oc create -f /home/$SUDOUSER/openshift-container-platform-playbooks/oms-secret.yaml
+oc create -f /home/$SUDOUSER/openshift-container-platform-playbooks/oms-agent.yaml
+
+# Finished creating OMS Agent daemonset
+echo $(date) " - OMS Agent daemonset created"
+
+fi
+
+# Disable self-provisioning of projects
+sleep 15
+echo $(date) " - Disable self-provisioning of projects."
+oc patch clusterrolebinding.rbac self-provisioners -p '{"subjects": null}'
+oc patch clusterrolebinding.rbac self-provisioners -p '{ "metadata": { "annotations": { "rbac.authorization.kubernetes.io/autoupdate": "false" } } }'
+oc  describe clusterrolebinding.rbac self-provisioners
+
+# Create custom project request message
+echo $(date) " - Create custom project request message"
+cat > /home/$SUDOUSER/openshift-container-platform-playbooks/projectreqmsg.yaml <<EOF
+projectRequestMessage: '${PROJREQMSG}
+EOF
+
+runuser -l $SUDOUSER -c "ansible-playbook -f 30 ~/openshift-container-platform-playbooks/add-project-request-message.yaml -e @~/openshift-container-platform-playbooks/vars.yaml"
+echo $(date) " - Custom project request message created"
+
 # Configure cluster for private masters
 if [[ $MASTERCLUSTERTYPE == "private" ]]
 then
 	echo $(date) " - Configure cluster for private masters"
 	runuser -l $SUDOUSER -c "ansible-playbook -f 30 ~/openshift-container-platform-playbooks/activate-private-lb-fqdn.31x.yaml"
 fi
-
-# Setting Masters to non-schedulable
-#echo $(date) " - Setting Masters to non-schedulable"
-#runuser -l $SUDOUSER -c "ansible-playbook -f 10 ~/openshift-container-platform-playbooks/reset-masters-non-schedulable.yaml"
-
-# Re-enabling requiretty
-#echo $(date) " - Re-enabling requiretty"
-#sed -i -e "s/# Defaults    requiretty/Defaults    requiretty/" /etc/sudoers
 
 # Delete yaml files
 echo $(date) " - Deleting unecessary files"
@@ -601,7 +722,7 @@ rm -rf /home/${SUDOUSER}/openshift-container-platform-playbooks
 echo $(date) " - Delete pem files"
 rm -rf /tmp/*.pem
 
-echo $(date) " - Sleep for 30"
-sleep 30
+echo $(date) " - Sleep for 15 seconds"
+sleep 15
 
 echo $(date) " - Script complete"

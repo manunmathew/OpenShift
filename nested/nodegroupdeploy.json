@@ -92,6 +92,24 @@
 				"description": "Availability set name"
 			}
 		},
+		"masterSubnetPrefix": {
+			"type": "string",
+			"metadata": {
+				"description": "CIDR used for the master subnet"
+			}
+		},
+		"infraSubnetPrefix": {
+			"type": "string",
+			"metadata": {
+				"description": "CIDR used for the infra subnet"
+			}
+		},
+		"cnsSubnetPrefix": {
+			"type": "string",
+			"metadata": {
+				"description": "CIDR used for the cns subnet"
+			}
+		},
 		"nodeFirstAddrOctet4": {
 			"type": "int",
 			"metadata": {
@@ -114,6 +132,18 @@
 			"type": "int",
 			"metadata": {
 				"description": "Node count"
+			}
+		},
+		"nameSuffix": {
+			"type": "string",
+			"metadata": {
+				"description": "Suffix to append to resource names"
+			}
+		},
+		"hostSuffix": {
+			"type": "string",
+			"metadata": {
+				"description": "Suffix to append to host names"
 			}
 		},
 		"customTags": {
@@ -140,50 +170,59 @@
 		}, {
 			"apiVersion": "[parameters('apiVersionNetwork')]",
 			"type": "Microsoft.Network/networkSecurityGroups",
-			"name": "[concat(parameters('openshiftClusterPrefix'), '-Nsg-Osca-01')]",
+			"name": "[concat(parameters('openshiftClusterPrefix'), '-Nsg-Osca-', parameters('nameSuffix'))]",
 			"location": "[parameters('location')]",
 			"tags": "[parameters('customTags')]",
 			"properties": {
-				"securityRules": [{
-					"name": "allowSSHin_all",
-					"properties": {
-						"description": "Allow SSH in from all locations",
-						"protocol": "Tcp",
-						"sourcePortRange": "*",
-						"destinationPortRange": "22",
-						"sourceAddressPrefix": "*",
-						"destinationAddressPrefix": "*",
-						"access": "Allow",
-						"priority": 100,
-						"direction": "Inbound"
-					}
-				}, {
-					"name": "allowHTTPS_all",
-					"properties": {
-						"description": "Allow HTTPS connections from all locations",
-						"protocol": "Tcp",
-						"sourcePortRange": "*",
-						"destinationPortRange": "443",
-						"sourceAddressPrefix": "*",
-						"destinationAddressPrefix": "*",
-						"access": "Allow",
-						"priority": 200,
-						"direction": "Inbound"
-					}
-				}, {
-					"name": "allowHTTPIn_all",
-					"properties": {
-						"description": "Allow HTTP connections from all locations",
-						"protocol": "Tcp",
-						"sourcePortRange": "*",
-						"destinationPortRange": "80",
-						"sourceAddressPrefix": "*",
-						"destinationAddressPrefix": "*",
-						"access": "Allow",
-						"priority": 300,
-						"direction": "Inbound"
-					}
-				}]
+				"securityRules": [
+                    {
+                        "name": "Allow-OpenShiftCoreNodes-To-OpenShiftAppNodes-All-All",
+                        "properties": {
+                            "description": "Allow-OpenShiftCoreNodes-To-OpenShiftAppNodes-All-All",
+                            "protocol": "*",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "*",
+                            "sourceAddressPrefixes": [
+                                "[parameters('masterSubnetPrefix')]",
+                                "[parameters('infraSubnetPrefix')]",
+                                "[parameters('cnsSubnetPrefix')]"
+                            ],
+                            "destinationAddressPrefix": "[parameters('subnetPrefix')]",
+                            "access": "Allow",
+                            "priority": 1000,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "Allow-OpenShiftAppNodes-To-OpenShiftAppNodes-All-All",
+                        "properties": {
+                            "description": "Allow-OpenShiftAppNodes-To-OpenShiftAppNodes-All-All",
+                            "protocol": "*",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "*",
+                            "sourceAddressPrefixes": [
+                                "[parameters('subnetPrefix')]"
+                            ],
+                            "destinationAddressPrefix": "[parameters('subnetPrefix')]",
+                            "access": "Allow",
+                            "priority": 1001,
+                            "direction": "Inbound"
+                        }
+                    },
+                    {
+                        "name": "Deny-Any-To-Any",
+                        "properties": {
+                            "protocol": "*",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "*",
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Deny",
+                            "priority": 4096,
+                            "direction": "Inbound"
+                        }
+                    }
+                ]
 			}
 		}, {
 			"name": "CreateNodeSubnet",
@@ -191,7 +230,7 @@
 			"resourceGroup": "[parameters('virtualNetworkResourceGroupName')]",
 			"apiVersion": "[parameters('apiVersionLinkTemplate')]",
 			"dependsOn": [
-				"[concat('Microsoft.Network/networkSecurityGroups/', parameters('openshiftClusterPrefix'), '-Nsg-Osca-01')]"
+				"[concat('Microsoft.Network/networkSecurityGroups/', parameters('openshiftClusterPrefix'), '-Nsg-Osca-', parameters('nameSuffix'))]"
 			],
 			"properties": {
 				"mode": "Incremental",
@@ -216,7 +255,7 @@
 						"value": "[parameters('subnetPrefix')]"
 					},
 					"networkSecurityGroup": {
-						"value": "[resourceId(resourceGroup().name, 'Microsoft.Network/networkSecurityGroups/', concat(parameters('openshiftClusterPrefix'), '-Nsg-Osca-01'))]"
+						"value": "[resourceId(resourceGroup().name, 'Microsoft.Network/networkSecurityGroups/', concat(parameters('openshiftClusterPrefix'), '-Nsg-Osca-', parameters('nameSuffix')))]"
 					}
 				}
 			}
@@ -235,12 +274,12 @@
 			"tags": "[parameters('customTags')]"
 		}, {
 			"type": "Microsoft.Network/networkInterfaces",
-			"name": "[concat(parameters('openshiftNodeHostname'), padLeft(add(copyindex(), 1), 2, '0'), '-nic-01')]",
+			"name": "[concat(parameters('openshiftNodeHostname'), padLeft(add(copyindex(), 1), 2, parameters('hostSuffix')), '-nic-01')]",
 			"location": "[parameters('location')]",
 			"apiVersion": "[parameters('apiVersionNetwork')]",
 			"tags": "[parameters('customTags')]",
 			"dependsOn": [
-				"[concat('Microsoft.Network/networkSecurityGroups/', parameters('openshiftClusterPrefix'), '-Nsg-Osca-01')]",
+				"[concat('Microsoft.Network/networkSecurityGroups/', parameters('openshiftClusterPrefix'), '-Nsg-Osca-', parameters('nameSuffix'))]",
 				"CreateNodeSubnet"
 			],
 			"copy": {
@@ -249,7 +288,7 @@
 			},
 			"properties": {
 				"ipConfigurations": [{
-					"name": "[concat(parameters('openshiftNodeHostname'), padLeft(add(copyindex(), 1), 2, '0'), 'ipconfig')]",
+					"name": "[concat(parameters('openshiftNodeHostname'), padLeft(add(copyindex(), 1), 2, parameters('hostSuffix')), 'ipconfig')]",
 					"properties": {
 						"privateIPAllocationMethod": "Static",
 						"privateIPAddress": "[concat(parameters('nodeFirstAddrPrefix'), copyindex(parameters('nodeFirstAddrOctet4')))]",
