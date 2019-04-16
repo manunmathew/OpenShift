@@ -42,7 +42,7 @@
 	"variables": {},
 	"resources": [
 		{
-			"apiVersion": "[parameters('apiVersionNetwork')]",
+			"apiVersion": "2018-12-01",
 			"type": "Microsoft.Network/virtualNetworks/subnets",
 			"name": "[concat(parameters('existingVnetName'), '/', parameters('subnetName'))]",
 			"location": "[parameters('location')]",
@@ -50,7 +50,7 @@
 			"properties": {
 				"addressPrefix": "[parameters('subnetPrefix')]",
 				"routeTable": {
-					"id": "[resourceId('Microsoft.Network/routeTables', (parameters('existingVnetName'))]"
+					"id": "[resourceId('Microsoft.Network/routeTables', parameters('existingVnetName'))]"
 				},
 				"networkSecurityGroup": {
 					"id": "[parameters('networkSecurityGroup')]"
