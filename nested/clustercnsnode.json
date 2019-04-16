@@ -179,8 +179,10 @@
 		"apiVersion": "2017-03-30",
 		"tags": "[parameters('customTags')]",
 		"plan": "[if(equals(parameters('osImageType'), 'marketplace'), parameters('marketplacePlan'), json('null'))]",
-		"zones": "[split(string(add(mod(copyIndex(),3),1)), ',')]",
 		"properties": {
+			"availabilitySet": {
+				"id": "[resourceId('Microsoft.Compute/availabilitySets', parameters('availabilitySet'))]"
+			},
 			"hardwareProfile": {
 				"vmSize": "[parameters('vmSize')]"
 			},
