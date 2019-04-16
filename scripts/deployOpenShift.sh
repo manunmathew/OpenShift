@@ -359,8 +359,13 @@ $NODEGROUP
 
 # Workaround for docker image failure
 # https://access.redhat.com/solutions/3480921
-oreg_url=registry.access.redhat.com/openshift3/ose-\${component}:\${version}
+# oreg_url=registry.access.redhat.com/openshift3/ose-\${component}:\${version}
+# openshift_examples_modify_imagestreams=true
+oreg_url=registry.redhat.io/openshift3/ose-${component}:${version}
 openshift_examples_modify_imagestreams=true
+oreg_auth_user='11938883|openshiftprod'
+oreg_auth_password=eyJhbGciOiJSUzUxMiJ9.eyJzdWIiOiJiNTVkODMwNGJlNDU0NTM1ODRkOGE4NGI2NDkwZmQ0ZCJ9.NvqQd-qC6NN5Mm2DjfjnskFDiqOJFHJoX3QCAoOi16hemA84LIWMgMfyxE5hXYDzrnu549c1GNda-wV20-nsRgYE70xnfLA3ZrzQ-FbwCj7aLS1b0kciBlfEEolrcYQYOAQdCtVLae9MNEC7E6tIgvNSJYHQwVrGOChdSyFulyLYnBOo4Q0nCP57bugnTRigyav36r6y-DXQGsOC8VnmP-vs3VUk3tPEKCAYAevDRRoGwmDv4t8dgc4OwbOkXEwcHerMeE3KhokYHWSNZMk6mbGjBfgcn9zX8XEbR8OXSM2c3bfUQREo1V66ZgimejQkxRzeeNRlKIJkqwaKHGK0m2JG0sVrpRqWNtAYuSpX7ec88wu4B3vbEyt_M4S5JbR7OJM1mNgaq7bAf99PqM5cQkVB3_2Io_24BuaqmdahmrXKzbCS4nJgxRrmVDJe0vaP-6XIR_DTbWpI917idDRrSWAH7pD0tB51ak4Z7_azGhOpa3epSJ_xA-4DfOhoGkL_isVtppWQlSWQRTdTV8Uz1p3_lchN0YAjN3zD9ckWdZISL9uObahOTZuD6_6Plipw3JNNahS4GkmAuEac0NOA-BB5nPp_WCebcka0tTh9DyKUutFa4Vj7-8EPR4oo0hVQ1F7C7lPa4Q0LVQOAsszkiSYBBw57Z0iuq1GVB5mVcOc
+
 
 # default selectors for router and registry services
 openshift_router_selector='node-role.kubernetes.io/infra=true'
@@ -413,6 +418,10 @@ openshift_logging_es_nodeselector={"node-role.kubernetes.io/infra":"true"}
 openshift_logging_kibana_nodeselector={"node-role.kubernetes.io/infra":"true"}
 openshift_logging_curator_nodeselector={"node-role.kubernetes.io/infra":"true"}
 #openshift_logging_master_public_url=https://$MASTERPUBLICIPHOSTNAME
+
+# Setup Red Hat CloudForms
+openshift_management_install_management=true
+openshift_management_storage_class=preconfigured
 
 # host group for masters
 [masters]
